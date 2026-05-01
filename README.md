@@ -1,1 +1,211 @@
-# Alon-fc
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Alon FC - Soccer Learning</title>
+    <style>
+        body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a1a1a; color: white; overflow: hidden; touch-action: none; }
+        .screen { display: none; height: 100vh; flex-direction: column; justify-content: center; align-items: center; background: linear-gradient(180deg, #1e5128 0%, #2e7d32 100%); }
+        .active { display: flex; }
+        
+        /* עיצוב מסך פתיחה */
+        h1 { font-size: 42px; color: #ffeb3b; margin: 5px 0; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }
+        .creator { font-size: 18px; color: #ffffff; margin-bottom: 20px; opacity: 0.9; }
+        
+        .roles-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 15px 0; width: 90%; max-width: 400px; }
+        .role-btn { padding: 12px 5px; border: none; border-radius: 8px; background: rgba(0,0,0,0.3); color: white; font-size: 12px; font-weight: bold; border: 1px solid rgba(255,255,255,0.1); }
+        .selected { background: #ffeb3b !important; color: #000; box-shadow: 0 0 15px rgba(255,235,59,0.5); }
+        
+        input { padding: 12px; border-radius: 8px; border: none; width: 160px; margin: 5px; text-align: center; font-size: 16px; background: rgba(255,255,255,0.9); color: #333; }
+        
+        #exit-btn { position: absolute; top: 15px; left: 15px; padding: 10px 20px; background: #ff4757; color: white; border: none; border-radius: 25px; font-weight: bold; z-index: 100; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        
+        #controls { position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: space-between; padding: 0 30px; box-sizing: border-box; pointer-events: none; }
+        #joy-bg { width: 90px; height: 90px; background: rgba(255,255,255,0.15); border-radius: 50%; position: relative; pointer-events: auto; backdrop-filter: blur(5px); border: 2px solid rgba(255,255,255,0.2); }
+        #joy-stick { width: 40px; height: 40px; background: #fff; border-radius: 50%; position: absolute; top: 25px; left: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.4); }
+        .btn-act { width: 85px; height: 85px; border-radius: 50%; border: none; background: #ffeb3b; color: #000; font-weight: bold; font-size: 16px; pointer-events: auto; box-shadow: 0 6px 15px rgba(0,0,0,0.3); }
+        
+        canvas { background: #2e7d32; display: block; }
+        .hud { position: absolute; top: 15px; right: 15px; background: rgba(0,0,0,0.7); padding: 8px 20px; border-radius: 25px; border: 1px solid rgba(255,255,255,0.2); font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div id="home" class="screen active">
+        <h1>לימוד כדורגל</h1>
+        <div class="creator">יוצר: אלון יצחק</div>
+        
+        <input type="text" id="nick" placeholder="כינוי השחקן">
+        <input type="number" id="jersey" placeholder="מספר חולצה">
+        
+        <div class="roles-grid">
+            <button class="role-btn" onclick="selR('שוער', this)">שוער</button>
+            <button class="role-btn" onclick="selR('בלם ימין', this)">בלם ימין</button>
+            <button class="role-btn" onclick="selR('בלם שמאל', this)">בלם שמאל</button>
+            <button class="role-btn" onclick="selR('מגן ימין', this)">מגן ימין</button>
+            <button class="role-btn" onclick="selR('מגן שמאל', this)">מגן שמאל</button>
+            <button class="role-btn" onclick="selR('קשר אחורי', this)">קשר אחורי</button>
+            <button class="role-btn" onclick="selR('קשר 50/50', this)">קשר 50/50</button>
+            <button class="role-btn" onclick="selR('קשר התקפי', this)">קשר התקפי</button>
+            <button class="role-btn" onclick="selR('כנף ימין', this)">כנף ימין</button>
+            <button class="role-btn" onclick="selR('כנף שמאל', this)">כנף שמאל</button>
+            <button class="role-btn" onclick="selR('חלוץ', this)">חלוץ</button>
+        </div>
+        
+        <button onclick="start()" style="padding:15px 60px; border-radius:35px; background:#4ecca3; border:none; font-weight:bold; font-size: 20px; color: #1a1a1a; cursor: pointer; margin-top: 10px;">התחל אימון</button>
+    </div>
+
+    <div id="game" class="screen">
+        <button id="exit-btn" onclick="exitGame()">יציאה</button>
+        <div class="hud">ניקוד: <span id="score">0</span></div>
+        <canvas id="c"></canvas>
+        <div id="controls">
+            <div id="joy-bg"><div id="joy-stick"></div></div>
+            <div id="act-btn"></div>
+        </div>
+    </div>
+
+<script>
+    let canvas = document.getElementById("c"), ctx = canvas.getContext("2d");
+    let nick = "", role = "", score = 0, jerseyNum = "10", joyPos = {x:0, y:0}, joyActive = false;
+    let p = {x:0, y:0}, ball = {x:0, y:0, active:false, sx:0, sy:0, attached:false};
+    let enemies = [];
+    let gameRunning = false;
+
+    function selR(r, b) {
+        role = r;
+        document.querySelectorAll('.role-btn').forEach(btn => btn.classList.remove('selected'));
+        b.classList.add('selected');
+    }
+
+    function exitGame() { gameRunning = false; document.getElementById("game").classList.remove("active"); document.getElementById("home").classList.add("active"); }
+
+    function start() {
+        nick = document.getElementById("nick").value || "שחקן";
+        jerseyNum = document.getElementById("jersey").value || "10";
+        if(!role) return alert("בחר תפקיד במגרש!");
+        document.getElementById("home").classList.remove("active");
+        document.getElementById("game").classList.add("active");
+        score = 0; gameRunning = true;
+        initGame();
+    }
+
+    function initGame() {
+        canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+        p.x = canvas.width/2; 
+        enemies = [];
+        let btnArea = document.getElementById("act-btn");
+
+        if (role === 'שוער') {
+            p.y = 80;
+            btnArea.innerHTML = `<button class="btn-act" onclick="p.x-=70">זינוק</button>`;
+            resetBallGK();
+        } else if (role.includes('בלם') || role.includes('מגן')) {
+            p.y = 150;
+            btnArea.innerHTML = `<button class="btn-act">חטיפה</button>`;
+            for(let i=0; i<3; i++) spawnEnemy('escape');
+        } else {
+            p.y = canvas.height - 150;
+            btnArea.innerHTML = `<button class="btn-act" onclick="shoot()">בעיטה</button>`;
+            ball.attached = true;
+            for(let i=0; i<3; i++) spawnEnemy('attack');
+        }
+        setupControls();
+        update();
+    }
+
+    function spawnEnemy(type) {
+        enemies.push({
+            x: Math.random() * (canvas.width - 40) + 20,
+            y: type === 'escape' ? canvas.height : 150,
+            speed: 2 + Math.random() * 2,
+            type: type, // 'attack' = רודף, 'escape' = בורח לשער
+            num: Math.floor(Math.random()*99)
+        });
+    }
+
+    function shoot() {
+        if(!ball.attached) return;
+        ball.attached = false; ball.active = true;
+        let dx = canvas.width/2 - ball.x, dy = -ball.y;
+        let dist = Math.sqrt(dx*dx+dy*dy);
+        ball.sx = (dx/dist)*20; ball.sy = (dy/dist)*20;
+    }
+
+    function update() {
+        if(!gameRunning) return;
+        ctx.fillStyle = "#2e7d32"; ctx.fillRect(0,0,canvas.width, canvas.height);
+        
+        // ציור דשא
+        ctx.strokeStyle = "rgba(255,255,255,0.1)"; ctx.lineWidth = 2;
+        for(let i=0; i<canvas.height; i+=50) ctx.strokeRect(0, i, canvas.width, 1);
+
+        // שער
+        ctx.strokeStyle = "white"; ctx.lineWidth = 6; ctx.strokeRect(canvas.width/2-80, 0, 160, 20);
+
+        p.x = Math.max(20, Math.min(canvas.width-20, p.x + joyPos.x * 7));
+        p.y = Math.max(20, Math.min(canvas.height-140, p.y + joyPos.y * 7));
+
+        enemies.forEach((en, i) => {
+            if (en.type === 'attack') {
+                let dx = p.x - en.x, dy = p.y - en.y, d = Math.sqrt(dx*dx+dy*dy);
+                en.x += (dx/d)*en.speed; en.y += (dy/d)*en.speed;
+                if(d < 30 && ball.attached) { ball.attached=false; ball.x=en.x; ball.y=en.y+50; setTimeout(()=>ball.attached=true, 1200); }
+            } else {
+                en.y -= en.speed;
+                let dx = en.x - p.x, dy = en.y - p.y, d = Math.sqrt(dx*dx+dy*dy);
+                if(d < 100) en.x += (dx/d)*2.5; 
+                if(d < 35) { score+=5; enemies.splice(i,1); spawnEnemy('escape'); }
+                if(en.y < 10) { score-=10; enemies.splice(i,1); spawnEnemy('escape'); }
+            }
+            drawPlayer(en.x, en.y, en.num, "#ff4757", "#000");
+        });
+
+        if (role === 'שוער') {
+            ball.x += ball.sx; ball.y += ball.sy;
+            if(Math.sqrt((ball.x-p.x)**2+(ball.y-p.y)**2)<45) { score+=5; resetBallGK(); }
+            if(ball.y < 0) { score-=10; resetBallGK(); }
+        } else {
+            if(ball.attached) { ball.x=p.x; ball.y=p.y+25; }
+            if(ball.active) {
+                ball.x+=ball.sx; ball.y+=ball.sy;
+                if(ball.y<20 && ball.x>canvas.width/2-80 && ball.x<canvas.width/2+80) { score+=20; ball.active=false; ball.attached=true; }
+                if(ball.y<0 || ball.y>canvas.height) { ball.active=false; ball.attached=true; }
+            }
+        }
+
+        drawPlayer(p.x, p.y, jerseyNum, "#2f3542", "#fff");
+        ctx.beginPath(); ctx.arc(ball.x, ball.y, 9, 0, Math.PI*2); ctx.fillStyle="#fff"; ctx.fill();
+        ctx.strokeStyle = "#000"; ctx.lineWidth = 1; ctx.stroke();
+        
+        document.getElementById("score").innerText = score;
+        requestAnimationFrame(update);
+    }
+
+    function drawPlayer(x, y, num, shirt, pants) {
+        ctx.fillStyle = shirt; ctx.fillRect(x - 15, y, 30, 35);
+        ctx.fillStyle = "#ffdbac"; ctx.beginPath(); ctx.arc(x, y - 10, 10, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = "white"; ctx.font = "bold 12px Arial"; ctx.textAlign = "center"; ctx.fillText(num, x, y + 22);
+        ctx.fillStyle = pants; ctx.fillRect(x - 15, y + 35, 30, 10);
+    }
+
+    function resetBallGK() { ball.y = canvas.height; ball.x = Math.random()*canvas.width; ball.sy = -9; ball.sx = (canvas.width/2 - ball.x)/70; }
+
+    function setupControls() {
+        const bg = document.getElementById("joy-bg"), st = document.getElementById("joy-stick");
+        bg.ontouchstart = (e) => { joyActive = true; e.preventDefault(); };
+        window.ontouchmove = (e) => {
+            if(!joyActive) return;
+            let t = e.touches[0], r = bg.getBoundingClientRect();
+            let dx = t.clientX - (r.left + 45), dy = t.clientY - (r.top + 45);
+            let d = Math.min(Math.sqrt(dx*dx+dy*dy), 35);
+            let ang = Math.atan2(dy, dx);
+            joyPos.x = Math.cos(ang) * (d/35); joyPos.y = Math.sin(ang) * (d/35);
+            st.style.transform = `translate(${joyPos.x*30}px, ${joyPos.y*30}px)`;
+        };
+        window.ontouchend = () => { joyActive=false; joyPos={x:0, y:0}; st.style.transform="translate(0,0)"; };
+    }
+</script>
+</body>
+</html>
